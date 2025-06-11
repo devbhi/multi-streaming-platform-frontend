@@ -1,81 +1,91 @@
-import { useState, useEffect, useRef } from "react";
-import io from "socket.io-client";
-import axios from "axios"; // Import axios
-
-const socket = io("http://localhost:3000");
+import { useState, useEffect } from "react";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
+import Login from "./components/Login";
+import Register from "./components/Register";
+import Dashboard from "./components/Dashboard";
+import { ThemeProvider } from "./contexts/ThemeContext";
+import { getStoredUser, clearStoredUser } from "./utils/auth";
 
 function App() {
-  const videoRef = useRef(null);
-  const [mediaStream, setMediaStream] = useState(null);
-  const [keySent, setKeySent] = useState(false);
-  const [useId, setUserId] = useState("5825577a-08bc-44e7-aa30-94111e665011");
-  const [youtubeKey, setYoutubeKey] = useState(""); // State to store YouTube key
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const initializeMedia = async () => {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
-      setMediaStream(stream);
-      videoRef.current.srcObject = stream;
-    };
-
-    initializeMedia().catch(console.error);
+    // Check if user is already logged in
+    const savedUser = getStoredUser();
+    if (savedUser) {
+      setUser(savedUser);
+    }
+    setIsLoading(false);
   }, []);
 
-  useEffect(() => {
-    const fetchYoutubeKey = async () => {
-      try {
-        const response = await axios.get(
-          "https://multi-streaming-platform-backend.vercel.app/keys/youtube",
-          {
-            params: { userId: useId },
-          }
-        );
-        setYoutubeKey(response.data.youtubeKey);
-      } catch (error) {
-        console.error("Error fetching YouTube key:", error);
-      }
-    };
-
-    fetchYoutubeKey();
-  }, []);
-
-  const startRecording = () => {
-    if (!mediaStream) return;
-
-    const mediaRecorder = new MediaRecorder(mediaStream, {
-      audioBitsPerSecond: 128000,
-      videoBitsPerSecond: 2500000,
-    });
-
-    mediaRecorder.ondataavailable = (event) => {
-      if (youtubeKey && !keySent) {
-        socket.emit("send-key", youtubeKey);
-        setKeySent(true);
-      }
-      if (keySent) {
-        if (event.data && event.data.size > 0) {
-          console.log("Binary Stream Available", event.data);
-          socket.emit("binarystream", event.data);
-        }
-      }
-    };
-
-    mediaRecorder.start(25); // sends data in 25ms chunks
+  const handleLogin = (userData) => {
+    setUser(userData);
   };
 
-  return (
-    <>
-      <div>
-        <h1>Streamyard Clone</h1>
-        <div>
-          <video ref={videoRef} autoPlay muted></video>
-          <button onClick={startRecording}>Start</button>
-        </div>
+  const handleRegister = (userData) => {
+    setUser(userData);
+  };
+
+  const handleLogout = () => {
+    clearStoredUser();
+    setUser(null);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-lg">Loading...</div>
       </div>
-    </>
+    );
+  }
+
+  return (
+    <ThemeProvider>
+      <Router>
+        <Routes>
+          <Route
+            path="/login"
+            element={
+              user ? (
+                <Navigate to="/dashboard" replace />
+              ) : (
+                <Login onLogin={handleLogin} />
+              )
+            }
+          />
+          <Route
+            path="/register"
+            element={
+              user ? (
+                <Navigate to="/dashboard" replace />
+              ) : (
+                <Register onRegister={handleRegister} />
+              )
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              user ? (
+                <Dashboard user={user} onLogout={handleLogout} />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+          <Route
+            path="/"
+            element={<Navigate to={user ? "/dashboard" : "/login"} replace />}
+          />
+        </Routes>
+      </Router>
+    </ThemeProvider>
   );
 }
 
