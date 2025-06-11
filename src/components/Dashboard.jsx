@@ -4,6 +4,7 @@ import { authService } from "../services/authService";
 import { LogOut, Play, Square, Users, Eye, Clock } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import PlatformButtons from "./PlatformButtons";
+import axios from "axios";
 
 const socket = io("http://localhost:3000");
 
@@ -14,6 +15,7 @@ const Dashboard = ({ user, onLogout }) => {
   const [isStreaming, setIsStreaming] = useState(false);
   const [youtubeKey, setYoutubeKey] = useState("");
   const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [useId, setUserId] = useState("5825577a-08bc-44e7-aa30-94111e665011");
 
   // Default dashboard data
   const [dashboardData] = useState({
@@ -69,33 +71,82 @@ const Dashboard = ({ user, onLogout }) => {
   useEffect(() => {
     const fetchYoutubeKey = async () => {
       try {
-        const result = await authService.getYouTubeKey(user.id);
-        if (result.success) {
-          setYoutubeKey(result.youtubeKey);
-        } else {
-          console.error("Error fetching YouTube key:", result.error);
-        }
+        const response = await axios.get(
+          "https://multi-streaming-platform-backend.vercel.app/keys/youtube",
+          {
+            params: { userId: useId },
+          }
+        );
+        console.log("Fetched YouTube key:", response.data.youtubeKey);
+        setYoutubeKey(response.data.youtubeKey);
       } catch (error) {
         console.error("Error fetching YouTube key:", error);
       }
     };
 
     fetchYoutubeKey();
-  }, [user.id]);
+  }, []);
 
-  const startStreaming = () => {
+  // useEffect(() => {
+  //   const fetchYoutubeKey = async () => {
+  //     try {
+  //       const result = await authService.getYouTubeKey(user.id);
+  //       if (result.success) {
+  //         setYoutubeKey(result.youtubeKey);
+  //       } else {
+  //         console.error("Error fetching YouTube key:", result.error);
+  //       }
+  //     } catch (error) {
+  //       console.error("Error fetching YouTube key:", error);
+  //     }
+  //   };
+
+  //   fetchYoutubeKey();
+  // }, [user.id]);
+
+  // const startStreaming = () => {
+  //   if (!mediaStream) return;
+
+  //   const recorder = new MediaRecorder(mediaStream, {
+  //     audioBitsPerSecond: 128000,
+  //     videoBitsPerSecond: 2500000,
+  //   });
+
+  //   recorder.ondataavailable = (event) => {
+  //     if (youtubeKey && !keySent) {
+  //       socket.emit("send-key", youtubeKey);
+  //       setKeySent(true);
+  //     }
+  //     if (keySent) {
+  //       if (event.data && event.data.size > 0) {
+  //         console.log("Binary Stream Available", event.data);
+  //         socket.emit("binarystream", event.data);
+  //       }
+  //     }
+  //   };
+
+  //   recorder.start(25);
+  //   setMediaRecorder(recorder);
+  //   setIsStreaming(true);
+  // };
+
+  const startRecording = () => {
+    if (youtubeKey && !keySent) {
+      console.log("Starting recording...");
+
+      socket.emit("send-key", youtubeKey);
+      setKeySent(true);
+    }
+
     if (!mediaStream) return;
 
-    const recorder = new MediaRecorder(mediaStream, {
+    const mediaRecorder = new MediaRecorder(mediaStream, {
       audioBitsPerSecond: 128000,
       videoBitsPerSecond: 2500000,
+      framerate: 25,
     });
 
-    recorder.ondataavailable = (event) => {
-      if (youtubeKey && !keySent) {
-        socket.emit("send-key", youtubeKey);
-        setKeySent(true);
-      }
+    mediaRecorder.ondataavailable = (event) => {
       if (keySent) {
         if (event.data && event.data.size > 0) {
           console.log("Binary Stream Available", event.data);
@@ -104,9 +155,7 @@ const Dashboard = ({ user, onLogout }) => {
       }
     };
 
-    recorder.start(25);
-    setMediaRecorder(recorder);
-    setIsStreaming(true);
+    mediaRecorder.start(25);
   };
 
   const stopStreaming = () => {
@@ -230,7 +279,7 @@ const Dashboard = ({ user, onLogout }) => {
                 <div className="flex space-x-4">
                   {!isStreaming ? (
                     <button
-                      onClick={startStreaming}
+                      onClick={startRecording}
                       className="flex items-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
                     >
                       <Play className="w-4 h-4 mr-2" />
