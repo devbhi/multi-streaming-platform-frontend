@@ -9,7 +9,9 @@ A React-based frontend application for multi-platform streaming with authenticat
 - **Dashboard**: Comprehensive streaming dashboard with:
   - Live streaming controls (Start/Stop)
   - Real-time viewer statistics
-  - Platform status monitoring (YouTube, Twitch, Facebook)
+  - Platform connection buttons (YouTube, Twitch, Facebook, Instagram, TikTok, Discord)
+  - RTMP key management with secure popups
+  - Platform status monitoring
   - Recent streams history
   - User-friendly interface with Tailwind CSS
 
@@ -61,11 +63,22 @@ npm run dev
 ### Dashboard
 
 - View live streaming statistics
+- Connect to multiple streaming platforms (YouTube, Twitch, Facebook, Instagram, TikTok, Discord)
+- Add RTMP keys through secure popup modals
 - Start/stop streaming sessions
 - Monitor platform connection status
 - View recent streaming history
 - Toggle between light and dark themes
 - Logout when finished
+
+### Platform Connection
+
+- Click on any platform button to open the RTMP key modal
+- Enter your platform-specific stream key securely
+- Keys are masked by default with show/hide toggle
+- Copy functionality for easy key management
+- Platform-specific setup instructions and help links
+- Visual connection status indicators
 
 ### Theme Toggle
 
@@ -92,7 +105,11 @@ src/
 │   ├── Login.jsx          # Login page component
 │   ├── Register.jsx       # Registration page component
 │   ├── Dashboard.jsx      # Main dashboard component
-│   └── ThemeToggle.jsx    # Theme toggle button component
+│   ├── ThemeToggle.jsx    # Theme toggle button component
+│   ├── Modal.jsx          # Reusable modal component
+│   ├── PlatformButton.jsx # Individual platform button
+│   ├── PlatformButtons.jsx # Platform buttons container
+│   └── RTMPKeyModal.jsx   # RTMP key input modal
 ├── contexts/
 │   └── ThemeContext.jsx   # Theme context provider
 ├── hooks/
@@ -100,7 +117,8 @@ src/
 ├── services/
 │   └── authService.js     # Authentication API service
 ├── utils/
-│   └── auth.js           # Authentication utilities
+│   ├── auth.js           # Authentication utilities
+│   └── theme.js          # Theme utilities
 ├── App.jsx               # Main app with routing
 ├── main.jsx             # Application entry point
 └── index.css            # Global styles with theme variables
@@ -133,3 +151,24 @@ The application includes a comprehensive dark/light theme system:
 - **Tailwind Integration**: Leverages Tailwind's dark mode support
 - **React Context**: Theme state managed via React Context API
 - **System Integration**: Listens to system theme changes
+
+## Platform Integration
+
+The application supports multiple streaming platforms with a comprehensive UI system:
+
+### Supported Platforms
+
+- **YouTube** - Full RTMP streaming support
+- **Twitch** - Live streaming integration
+- **Facebook** - Social media streaming
+- **Instagram** - Live broadcast support
+- **TikTok** - Short-form live streaming
+- **Discord** - Community streaming
+
+### Features
+
+- **Visual Platform Buttons**: Branded buttons with platform-specific colors and icons
+- **Secure Key Management**: RTMP keys are masked and stored securely
+- **Connection Status**: Real-time visual indicators for connected platforms
+- **Setup Guidance**: Platform-specific instructions and help links
+- **Responsive Design**: Works seamlessly on desktop and mobile devices

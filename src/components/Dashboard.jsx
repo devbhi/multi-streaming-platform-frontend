@@ -3,6 +3,7 @@ import io from "socket.io-client";
 import { authService } from "../services/authService";
 import { LogOut, Play, Square, Users, Eye, Clock } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
+import PlatformButtons from "./PlatformButtons";
 
 const socket = io("http://localhost:3000");
 
@@ -117,6 +118,12 @@ const Dashboard = ({ user, onLogout }) => {
     setKeySent(false);
   };
 
+  const handlePlatformConnect = (platform, rtmpKey) => {
+    console.log(`Connected to ${platform} with key:`, rtmpKey);
+    // Here you could save the key to your backend or update local state
+    // For now, we'll just log it
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -146,6 +153,13 @@ const Dashboard = ({ user, onLogout }) => {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Platform Buttons Section */}
+        <div className="mb-8">
+          <div className="bg-card rounded-lg shadow border border-border p-6">
+            <PlatformButtons onPlatformConnect={handlePlatformConnect} />
+          </div>
+        </div>
+
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-card rounded-lg shadow border border-border p-6">
