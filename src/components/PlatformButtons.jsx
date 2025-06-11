@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import PlatformButton from "./PlatformButton";
 import RTMPKeyModal from "./RTMPKeyModal";
+import { authService } from "../services/authService";
 
 // Platform icons (using simple SVG icons for social media platforms)
 const YouTubeIcon = ({ className }) => (
@@ -39,10 +40,12 @@ const DiscordIcon = ({ className }) => (
   </svg>
 );
 
-const PlatformButtons = ({ onPlatformConnect }) => {
+const PlatformButtons = ({ onPlatformConnect, user }) => {
   const [selectedPlatform, setSelectedPlatform] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [connectedPlatforms, setConnectedPlatforms] = useState(new Set());
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   // Platform configuration
   const platforms = [
@@ -54,18 +57,81 @@ const PlatformButtons = ({ onPlatformConnect }) => {
     // { name: 'Discord', icon: DiscordIcon },
   ];
 
+  // Load existing keys on component mount
+  useEffect(() => {
+    const loadExistingKeys = async () => {
+      if (!user?.id) return;
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const connected = new Set();
+
+        // Check YouTube key
+        const youtubeResult = await authService.getYouTubeKey(user.id);
+        if (youtubeResult.success && youtubeResult.youtubeKey) {
+          connected.add("YouTube");
+        }
+
+        // Check Twitch key
+        const twitchResult = await authService.getTwitchKey(user.id);
+        if (twitchResult.success && twitchResult.twitchKey) {
+          connected.add("Twitch");
+        }
+
+        // Check Facebook key
+        const facebookResult = await authService.getFacebookKey(user.id);
+        if (facebookResult.success && facebookResult.facebookKey) {
+          connected.add("Facebook");
+        }
+
+        setConnectedPlatforms(connected);
+      } catch (error) {
+        console.error("Error loading existing keys:", error);
+        setError("Failed to load platform connections");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadExistingKeys();
+  }, [user?.id]);
+
   const handlePlatformClick = (platformName) => {
     setSelectedPlatform(platformName);
     setIsModalOpen(true);
   };
 
   const handleSaveKey = async (platform, rtmpKey) => {
+    if (!user?.id) {
+      throw new Error("User not authenticated");
+    }
+
     try {
-      // Here you would typically save to your backend
+      setError(null);
       console.log(`Saving RTMP key for ${platform}:`, rtmpKey);
 
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      let result;
+
+      // Call the appropriate API method based on platform
+      switch (platform) {
+        case "YouTube":
+          result = await authService.saveYouTubeKey(user.id, rtmpKey);
+          break;
+        case "Twitch":
+          result = await authService.saveTwitchKey(user.id, rtmpKey);
+          break;
+        case "Facebook":
+          result = await authService.saveFacebookKey(user.id, rtmpKey);
+          break;
+        default:
+          throw new Error(`Unsupported platform: ${platform}`);
+      }
+
+      if (!result.success) {
+        throw new Error(result.error || `Failed to save ${platform} key`);
+      }
 
       // Mark platform as connected
       setConnectedPlatforms((prev) => new Set([...prev, platform]));
@@ -78,6 +144,7 @@ const PlatformButtons = ({ onPlatformConnect }) => {
       setIsModalOpen(false);
     } catch (error) {
       console.error("Error saving RTMP key:", error);
+      setError(error.message || "Failed to save RTMP key");
       throw error;
     }
   };
@@ -94,9 +161,18 @@ const PlatformButtons = ({ onPlatformConnect }) => {
           Streaming Platforms
         </h2>
         <span className="text-sm text-muted-foreground">
-          {connectedPlatforms.size} of {platforms.length} connected
+          {loading
+            ? "Loading..."
+            : `${connectedPlatforms.size} of ${platforms.length} connected`}
         </span>
       </div>
+
+      {/* Error Display */}
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {platforms.map((platform) => (

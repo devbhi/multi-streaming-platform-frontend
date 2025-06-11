@@ -8,6 +8,7 @@ import {
 import Login from "./components/Login";
 import Register from "./components/Register";
 import Dashboard from "./components/Dashboard";
+import StreamingTest from "./components/StreamingTest";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { getStoredUser, clearStoredUser } from "./utils/auth";
 
@@ -79,6 +80,7 @@ function App() {
               )
             }
           />
+          <Route path="/test" element={<StreamingTest />} />
           <Route
             path="/"
             element={<Navigate to={user ? "/dashboard" : "/login"} replace />}

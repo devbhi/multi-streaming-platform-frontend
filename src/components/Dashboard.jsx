@@ -6,19 +6,30 @@ import ThemeToggle from "./ThemeToggle";
 import PlatformButtons from "./PlatformButtons";
 import axios from "axios";
 
-const socket = io("http://localhost:3000");
+// Socket connections for different platforms
+const SOCKET_URLS = {
+  YouTube: "http://localhost:3000",
+  Twitch: "http://localhost:5500",
+  Facebook: "http://localhost:6001",
+};
 
 const Dashboard = ({ user, onLogout }) => {
   const videoRef = useRef(null);
   const [mediaStream, setMediaStream] = useState(null);
-  const [keySent, setKeySent] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [youtubeKey, setYoutubeKey] = useState("");
+  const [twitchKey, setTwitchKey] = useState("");
+  const [facebookKey, setFacebookKey] = useState("");
   const [mediaRecorder, setMediaRecorder] = useState(null);
-  const [useId, setUserId] = useState("5825577a-08bc-44e7-aa30-94111e665011");
+  const [useId] = useState("5825577a-08bc-44e7-aa30-94111e665011");
+
+  // Multi-platform streaming state
+  const [selectedPlatforms, setSelectedPlatforms] = useState(new Set());
+  const [connectedSockets, setConnectedSockets] = useState({});
+  const [keysSent, setKeysSent] = useState({});
 
   // Default dashboard data
-  const [dashboardData] = useState({
+  const [dashboardData, setDashboardData] = useState({
     totalStreams: 12,
     liveViewers: 245,
     streamDuration: "02:34:15",
@@ -69,22 +80,47 @@ const Dashboard = ({ user, onLogout }) => {
   }, []);
 
   useEffect(() => {
-    const fetchYoutubeKey = async () => {
+    const fetchPlatformKeys = async () => {
       try {
-        const response = await axios.get(
+        // Fetch YouTube key
+        const youtubeResponse = await axios.get(
           "https://multi-streaming-platform-backend.vercel.app/keys/youtube",
-          {
-            params: { userId: useId },
-          }
+          { params: { userId: useId } }
         );
-        console.log("Fetched YouTube key:", response.data.youtubeKey);
-        setYoutubeKey(response.data.youtubeKey);
+        if (youtubeResponse.data.youtubeKey) {
+          setYoutubeKey(youtubeResponse.data.youtubeKey);
+        }
+
+        // Fetch Twitch key
+        const twitchResponse = await axios.get(
+          "https://multi-streaming-platform-backend.vercel.app/keys/twitch",
+          { params: { userId: useId } }
+        );
+        if (twitchResponse.data.twitchKey) {
+          setTwitchKey(twitchResponse.data.twitchKey);
+        }
+
+        // Fetch Facebook key
+        const facebookResponse = await axios.get(
+          "https://multi-streaming-platform-backend.vercel.app/keys/facebook",
+          { params: { userId: useId } }
+        );
+        if (facebookResponse.data.facebookKey) {
+          setFacebookKey(facebookResponse.data.facebookKey);
+        }
       } catch (error) {
-        console.error("Error fetching YouTube key:", error);
+        console.error("Error fetching platform keys:", error);
       }
     };
 
-    fetchYoutubeKey();
+    fetchPlatformKeys();
+  }, [useId]);
+
+  // Cleanup sockets on component unmount
+  useEffect(() => {
+    return () => {
+      disconnectSockets();
+    };
   }, []);
 
   // useEffect(() => {
@@ -104,58 +140,85 @@ const Dashboard = ({ user, onLogout }) => {
   //   fetchYoutubeKey();
   // }, [user.id]);
 
-  // const startStreaming = () => {
-  //   if (!mediaStream) return;
+  // Helper function to get platform keys
+  const getPlatformKey = (platform) => {
+    switch (platform) {
+      case "YouTube":
+        return youtubeKey;
+      case "Twitch":
+        return twitchKey;
+      case "Facebook":
+        return facebookKey;
+      default:
+        return "";
+    }
+  };
 
-  //   const recorder = new MediaRecorder(mediaStream, {
-  //     audioBitsPerSecond: 128000,
-  //     videoBitsPerSecond: 2500000,
-  //   });
+  // Disconnect from all sockets
+  const disconnectSockets = () => {
+    Object.values(connectedSockets).forEach((socket) => {
+      socket.disconnect();
+    });
+    setConnectedSockets({});
+    setKeysSent({});
+  };
 
-  //   recorder.ondataavailable = (event) => {
-  //     if (youtubeKey && !keySent) {
-  //       socket.emit("send-key", youtubeKey);
-  //       setKeySent(true);
-  //     }
-  //     if (keySent) {
-  //       if (event.data && event.data.size > 0) {
-  //         console.log("Binary Stream Available", event.data);
-  //         socket.emit("binarystream", event.data);
-  //       }
-  //     }
-  //   };
-
-  //   recorder.start(25);
-  //   setMediaRecorder(recorder);
-  //   setIsStreaming(true);
-  // };
-
-  const startRecording = () => {
-    if (youtubeKey && !keySent) {
-      console.log("Starting recording...");
-
-      socket.emit("send-key", youtubeKey);
-      setKeySent(true);
+  const startRecording = async () => {
+    if (selectedPlatforms.size === 0) {
+      alert("Please select at least one platform to stream to");
+      return;
     }
 
     if (!mediaStream) return;
 
-    const mediaRecorder = new MediaRecorder(mediaStream, {
+    // Connect to selected platform sockets and wait for connections
+    const newSockets = {};
+    const newKeysSent = {};
+
+    for (const platform of selectedPlatforms) {
+      const key = getPlatformKey(platform);
+      if (!key) {
+        alert(`No key configured for ${platform}`);
+        return;
+      }
+
+      console.log(`Connecting to ${platform} socket...`);
+      const socket = io(SOCKET_URLS[platform]);
+      newSockets[platform] = socket;
+
+      // Wait for connection and send key
+      socket.on("connect", () => {
+        console.log(`Connected to ${platform}, sending key...`);
+        socket.emit("send-key", key);
+        newKeysSent[platform] = true;
+        setKeysSent((prev) => ({ ...prev, [platform]: true }));
+      });
+    }
+
+    setConnectedSockets((prev) => ({ ...prev, ...newSockets }));
+
+    const recorder = new MediaRecorder(mediaStream, {
       audioBitsPerSecond: 128000,
       videoBitsPerSecond: 2500000,
       framerate: 25,
     });
 
-    mediaRecorder.ondataavailable = (event) => {
-      if (keySent) {
-        if (event.data && event.data.size > 0) {
-          console.log("Binary Stream Available", event.data);
-          socket.emit("binarystream", event.data);
-        }
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        console.log("Binary Stream Available", event.data);
+
+        // Send stream data to all connected platforms
+        Object.entries(newSockets).forEach(([platform, socket]) => {
+          if (socket.connected && newKeysSent[platform]) {
+            socket.emit("binarystream", event.data);
+          }
+        });
       }
     };
 
-    mediaRecorder.start(25);
+    recorder.start(25);
+    setMediaRecorder(recorder);
+    setIsStreaming(true);
   };
 
   const stopStreaming = () => {
@@ -163,14 +226,38 @@ const Dashboard = ({ user, onLogout }) => {
       mediaRecorder.stop();
       setMediaRecorder(null);
     }
+
+    // Disconnect from all sockets
+    disconnectSockets();
+
     setIsStreaming(false);
-    setKeySent(false);
   };
 
   const handlePlatformConnect = (platform, rtmpKey) => {
-    console.log(`Connected to ${platform} with key:`, rtmpKey);
-    // Here you could save the key to your backend or update local state
-    // For now, we'll just log it
+    console.log(`Successfully connected to ${platform} with key:`, rtmpKey);
+
+    // Update platform status in dashboard data
+    setDashboardData((prevData) => ({
+      ...prevData,
+      platforms: prevData.platforms.map((p) =>
+        p.name === platform ? { ...p, status: "connected" } : p
+      ),
+    }));
+
+    // Store the key for the specific platform
+    switch (platform) {
+      case "YouTube":
+        setYoutubeKey(rtmpKey);
+        break;
+      case "Twitch":
+        setTwitchKey(rtmpKey);
+        break;
+      case "Facebook":
+        setFacebookKey(rtmpKey);
+        break;
+      default:
+        break;
+    }
   };
 
   return (
@@ -205,12 +292,15 @@ const Dashboard = ({ user, onLogout }) => {
         {/* Platform Buttons Section */}
         <div className="mb-8">
           <div className="bg-card rounded-lg shadow border border-border p-6">
-            <PlatformButtons onPlatformConnect={handlePlatformConnect} />
+            <PlatformButtons
+              onPlatformConnect={handlePlatformConnect}
+              user={user}
+            />
           </div>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-card rounded-lg shadow border border-border p-6">
             <div className="flex items-center">
               <Users className="w-8 h-8 text-blue-500" />
@@ -250,9 +340,86 @@ const Dashboard = ({ user, onLogout }) => {
               </div>
             </div>
           </div>
+        </div> */}
+
+        {/* Platform Selection Section */}
+        <div className="mb-8">
+          <div className="bg-card rounded-lg shadow border border-border p-6">
+            <h2 className="text-lg font-medium text-foreground mb-4">
+              Select Streaming Platforms
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {["YouTube", "Twitch", "Facebook"].map((platform) => {
+                const hasKey = getPlatformKey(platform);
+                const isSelected = selectedPlatforms.has(platform);
+
+                return (
+                  <div
+                    key={platform}
+                    className={`relative p-4 border rounded-lg cursor-pointer transition-all ${
+                      !hasKey
+                        ? "border-gray-300 bg-gray-50 cursor-not-allowed opacity-50"
+                        : isSelected
+                        ? "border-blue-500 bg-blue-50 dark:bg-blue-950"
+                        : "border-border bg-background hover:border-blue-300"
+                    } ${isStreaming ? "cursor-not-allowed opacity-50" : ""}`}
+                    onClick={() => {
+                      if (!hasKey || isStreaming) return;
+
+                      const newSelected = new Set(selectedPlatforms);
+                      if (isSelected) {
+                        newSelected.delete(platform);
+                      } else {
+                        newSelected.add(platform);
+                      }
+                      setSelectedPlatforms(newSelected);
+                    }}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        disabled={!hasKey || isStreaming}
+                        onChange={() => {}} // Handled by div onClick
+                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <div className="flex-1">
+                        <h3 className="font-medium text-foreground">
+                          {platform}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          {!hasKey
+                            ? "No key configured"
+                            : isSelected
+                            ? "Selected for streaming"
+                            : "Available"}
+                        </p>
+                      </div>
+                      <div
+                        className={`w-3 h-3 rounded-full ${
+                          !hasKey
+                            ? "bg-gray-400"
+                            : isSelected
+                            ? "bg-green-500"
+                            : "bg-yellow-500"
+                        }`}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {selectedPlatforms.size > 0 && (
+              <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  Selected platforms: {Array.from(selectedPlatforms).join(", ")}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-1 gap-8">
           {/* Streaming Section */}
           <div className="bg-card rounded-lg shadow border border-border">
             <div className="p-6">
@@ -276,7 +443,7 @@ const Dashboard = ({ user, onLogout }) => {
                     </div>
                   )}
                 </div>
-                <div className="flex space-x-4">
+                <div className="flex space-x-4 justify-center">
                   {!isStreaming ? (
                     <button
                       onClick={startRecording}
@@ -295,62 +462,6 @@ const Dashboard = ({ user, onLogout }) => {
                     </button>
                   )}
                 </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Platform Status */}
-          <div className="space-y-6">
-            <div className="bg-card rounded-lg shadow border border-border p-6">
-              <h2 className="text-lg font-medium text-foreground mb-4">
-                Platform Status
-              </h2>
-              <div className="space-y-3">
-                {dashboardData.platforms.map((platform, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between p-3 border border-border rounded-lg bg-background"
-                  >
-                    <div className="flex items-center">
-                      <div
-                        className={`w-3 h-3 rounded-full mr-3 ${
-                          platform.status === "connected"
-                            ? "bg-green-500"
-                            : "bg-red-500"
-                        }`}
-                      />
-                      <span className="font-medium text-foreground">
-                        {platform.name}
-                      </span>
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {platform.viewers} viewers
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Recent Streams */}
-            <div className="bg-card rounded-lg shadow border border-border p-6">
-              <h2 className="text-lg font-medium text-foreground mb-4">
-                Recent Streams
-              </h2>
-              <div className="space-y-3">
-                {dashboardData.recentStreams.map((stream, index) => (
-                  <div
-                    key={index}
-                    className="p-3 border border-border rounded-lg bg-background"
-                  >
-                    <div className="font-medium text-foreground">
-                      {stream.title}
-                    </div>
-                    <div className="text-sm text-muted-foreground mt-1">
-                      {stream.date} • {stream.duration} • {stream.viewers}{" "}
-                      viewers
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
           </div>
